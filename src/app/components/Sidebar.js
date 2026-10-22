@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
@@ -10,13 +10,12 @@ export default function Sidebar() {
   const [isReportsOpen, setIsReportsOpen] = useState(false); // 📈 Reports ড্রপডাউন স্টেট
   
   // ইউজারের রোল স্টেট
-  const [userRole, setUserRole] = useState('operator');
-
-  useEffect(() => {
-    // লোকাল স্টোরেজ থেকে রোল তুলে আনা (ডিফল্ট অপারেটর)
-    const savedRole = localStorage.getItem('user_role') || 'operator';
-    setUserRole(savedRole);
-  }, []);
+  const [userRole] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('user_role') || 'operator';
+    }
+    return 'operator';
+  });
 
   const sidebarStyle = {
     width: '260px', backgroundColor: '#1a2332', height: '100vh',

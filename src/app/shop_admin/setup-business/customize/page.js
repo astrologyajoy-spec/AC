@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 
 // ১. ট্যাক্স এবং কমপ্লায়েন্স সহ সম্পূর্ণ মাস্টার টেমপ্লেট
@@ -169,23 +169,26 @@ const baseTemplates = {
   ]
 };
 
-// ২. প্রধান রিঅ্যাক্ট উপাদান (Default Export Component)
-export default function CustomizeLedger() {
+function CustomizeLedgerContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const type = searchParams.get('type') || 'trading';
   const shopId = 1; 
 
-  const [ledgers, setLedgers] = useState([]);
+  const [ledgers, setLedgers] = useState(() => {
+    let t = 'trading';
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      t = params.get('type') || 'trading';
+    }
+    const defaults = baseTemplates[t] || baseTemplates.trading;
+    return defaults.map(item => ({ ...item, checked: true }));
+  });
+  
   const [newItemName, setNewItemName] = useState('');
   const [newItemGroup, setNewItemGroup] = useState('Expense');
   const [newItemType, setNewItemType] = useState('Indirect');
   const [loading, setLoading] = useState(false);
-
-  useEffect(() => {
-    const defaults = baseTemplates[type] || baseTemplates.trading;
-    setLedgers(defaults.map(item => ({ ...item, checked: true })));
-  }, [type]);
 
   const toggleCheck = (index) => {
     const updated = [...ledgers];
@@ -299,5 +302,13 @@ export default function CustomizeLedger() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function CustomizeLedger() {
+  return (
+    <Suspense fallback={<div className="bg-slate-950 min-h-screen text-slate-100 p-8 flex items-center justify-center">Loading template customization...</div>}>
+      <CustomizeLedgerContent />
+    </Suspense>
   );
 }

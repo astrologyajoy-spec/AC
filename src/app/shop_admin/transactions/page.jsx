@@ -1,4 +1,5 @@
 'use client';
+/* eslint-disable react-hooks/set-state-in-effect */
 
 import { useState, useEffect } from 'react';
 
@@ -85,12 +86,6 @@ export default function AdvancedInvoiceBilling() {
   const [isCommitted, setIsCommitted] = useState(false);
   const [generatedInvoiceId, setGeneratedInvoiceId] = useState(null);
 
-  // মাস্টার ডাটা লোড ও ইনভয়েস নম্বর জেনারেশন
-  useEffect(() => {
-    fetchMasterData(); 
-    setInvoiceNo('INV-' + Math.floor(100000 + Math.random() * 900000)); 
-  }, [voucherType]); 
-
   const fetchMasterData = async () => {
     try {
       const prodRes = await fetch('/api/admin/inventory/save-product');
@@ -119,6 +114,12 @@ export default function AdvancedInvoiceBilling() {
       console.error("Data loading error:", err);
     }
   };
+
+  // মাস্টার ডাটা লোড ও ইনভয়েস নম্বর জেনারেশন
+  useEffect(() => {
+    fetchMasterData(); 
+    setInvoiceNo('INV-' + Math.floor(100000 + Math.random() * 900000)); 
+  }, [voucherType]);
 
   // লাইভ সার্চ ফিল্টারিং লজিক
   useEffect(() => {

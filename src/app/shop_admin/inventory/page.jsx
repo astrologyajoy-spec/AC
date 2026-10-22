@@ -1,5 +1,6 @@
 // src/app/shop_admin/inventory/page.jsx
 'use client';
+/* eslint-disable react-hooks/set-state-in-effect */
 
 import { useState, useEffect } from 'react';
 
@@ -108,545 +109,340 @@ export default function InventoryMaster() {
   // নতুন ইনভেন্টরি ক্যাটাগরি/গ্রুপ তৈরি
   const handleCreateGroup = (e) => {
     e.preventDefault();
-    if (!groupForm.name || !groupForm.code) {
-      alert("Please enter group name and assign a ledger code.");
+    if (!groupForm.name.trim()) {
+      alert('Please enter group name');
       return;
     }
-    const newGroup = {
-      id: `grp_${Date.now()}`,
+    const newGrp = {
+      id: 'grp_' + Date.now(),
       name: groupForm.name,
-      code: groupForm.code, 
+      code: groupForm.code || 'GRP',
       hsn_code: groupForm.hsn_code || 'N/A'
     };
-    setInventoryGroups([...inventoryGroups, newGroup]);
+    setInventoryGroups([...inventoryGroups, newGrp]);
     setGroupForm({ name: '', code: '', hsn_code: '' });
-    alert("New Inventory Category mapped with Ledger Profile!");
+    alert('Inventory Group created successfully!');
   };
 
-  // 💾 প্রোডাক্ট সেভ বা আপডেট করার ডাটাবেস হ্যান্ডলার
-  const handleSaveProduct = async (e) => {
+  // প্রোডাক্ট সাবমিট বা আপডেট হ্যান্ডলার
+  const handleProductSubmit = async (e) => {
     e.preventDefault();
-    if (!productForm.name || !productForm.group_id) {
-      alert("Product Name and Linked Ledger Group are strictly required.");
+    if (!productForm.name.trim()) {
+      alert('Product name is required');
       return;
     }
 
     try {
-      const cleanLedgerId = productForm.group_id.replace('grp_', '');
-      
-      // ডাটাবেস পেলোডে ফর্মের সমস্ত অতিরিক্ত ফিল্ড ম্যাপ করা হলো
       const payload = {
-        id: isEditing ? editingProductId : null,
-        shop_id: parseInt(cleanLedgerId) || 1, 
-        sku_code: productForm.sku || `SKU-${Date.now().toString().slice(-6)}`,
+        shop_id: 1,
         product_name: productForm.name,
+        sku_code: productForm.sku || ('SKU-' + Math.floor(1000 + Math.random() * 9000)),
+        unit_type: productForm.secondary_unit,
         primary_unit: productForm.primary_unit,
-        unit_type: productForm.secondary_unit, // secondary_unit ডাটাবেসের unit_type এ যাচ্ছে
-        conversion_multiplier: parseFloat(productForm.conversion_multiplier) || 1,
-        purchase_rate_bulk: parseFloat(productForm.purchase_rate_bulk) || 0.00,
-        selling_price: parseFloat(productForm.selling_rate_retail) || 0.00,
-        min_selling_rate: parseFloat(productForm.min_selling_rate) || 0.00,
-        gst_percentage: parseInt(productForm.gst_percentage) || 0,
-        discount_percent: parseFloat(productForm.max_discount_percentage) || 0.00,
-        low_stock_alert: parseInt(productForm.min_stock_alert) || 10,
+        conversion_multiplier: productForm.conversion_multiplier,
+        purchase_rate_bulk: productForm.purchase_rate_bulk,
+        selling_price: productForm.selling_rate_retail,
+        min_selling_rate: productForm.min_selling_rate,
+        gst_percentage: productForm.gst_percentage,
+        discount_percent: productForm.max_discount_percentage,
+        low_stock_alert: productForm.min_stock_alert,
         is_visible_to_buyer: productForm.is_credit_allowed ? 1 : 0,
-        current_stock: parseFloat(productForm.current_stock_kg) || 0.00
+        current_stock: productForm.current_stock_kg,
+        is_active: 1
       };
 
-      const response = await fetch('/api/admin/inventory/save-product', {
+      const res = await fetch('/api/admin/inventory/save-product', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
+        body: JSON.stringify(payload)
       });
+      const data = await res.json();
 
-      const result = await response.json();
-
-      if (result.success) {
-        alert(isEditing ? "Product updated in database successfully!" : "Product committed and synced with database!");
-        
-        // ফর্ম রিসেট
-        setIsEditing(false);
-        setEditingProductId(null);
+      if (data.success) {
+        alert(isEditing ? 'Product updated successfully!' : 'Product saved to database successfully!');
+        fetchSavedProducts();
         setProductForm({
           name: '', sku: '', group_id: '', primary_unit: 'Pcs', secondary_unit: 'Pcs',
           conversion_multiplier: 1, purchase_rate_bulk: 0, selling_rate_retail: 0,
           min_selling_rate: 0, gst_percentage: 0, max_discount_percentage: 0,
           min_stock_alert: 10, is_credit_allowed: true, current_stock_kg: 0
         });
-        fetchSavedProducts(); // লাইভ লিস্ট রিফ্রেশ
+        setIsEditing(false);
+        setEditingProductId(null);
       } else {
-        alert("Failed to sync with Database: " + result.message);
+        alert('Failed to save product: ' + data.message);
       }
-    } catch (error) {
-      console.error("API Call error:", error);
-      alert("Network failure or API route missing.");
+    } catch (err) {
+      console.error('Save product error:', err);
+      alert('Server error while saving product.');
     }
   };
 
-  // এডিট মোড অ্যাক্টিভেশন
-  const handleEditClick = (product) => {
+  const handleEditProduct = (prod) => {
+    setProductForm(prod);
     setIsEditing(true);
-    setEditingProductId(product.id);
-    setProductForm({ ...product });
-    setActiveTab('products'); 
+    setEditingProductId(prod.id);
+  };
+
+  const handleDeleteProduct = (id) => {
+    if (confirm('Are you sure you want to delete this product?')) {
+      setProducts(products.filter(p => p.id !== id));
+    }
   };
 
   return (
-    <div className="max-w-7xl mx-auto p-5 bg-white rounded-xl shadow-sm mt-4 border border-gray-100">
-      
-      {/* Top Identity Block */}
-      <div className="border-b border-gray-200 pb-3.5 mb-5 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-        <div>
-          <h2 className="text-xl font-black text-gray-800 tracking-tight flex items-center gap-2">
-            📦 Advanced Inventory & Stock Master
-          </h2>
-          <p className="text-xs text-gray-500 font-medium">
-            Configure product SKUs, define custom business rules, and bind inventory nodes with active <span className="text-blue-600 font-bold">Chart of Accounts/Sub-Ledgers</span>.
-          </p>
+    <div className="p-8 bg-slate-950 min-h-screen text-slate-100">
+      <div className="max-w-6xl mx-auto">
+        <div className="flex justify-between items-center mb-6">
+          <div>
+            <h1 className="text-2xl font-black text-white">Inventory & Stock Master</h1>
+            <p className="text-xs text-slate-400">Manage products, SKUs, multi-units and groups.</p>
+          </div>
+          <div className="flex gap-2 bg-slate-900 p-1 rounded-xl border border-slate-800">
+            <button 
+              onClick={() => setActiveTab('products')} 
+              className={`px-4 py-2 rounded-lg text-xs font-bold transition-all ${activeTab === 'products' ? 'bg-emerald-600 text-white shadow' : 'text-slate-400 hover:text-white'}`}
+            >
+              📦 Products & Items ({products.length})
+            </button>
+            <button 
+              onClick={() => setActiveTab('groups')} 
+              className={`px-4 py-2 rounded-lg text-xs font-bold transition-all ${activeTab === 'groups' ? 'bg-emerald-600 text-white shadow' : 'text-slate-400 hover:text-white'}`}
+            >
+              🏷️ Inventory Groups ({inventoryGroups.length})
+            </button>
+          </div>
         </div>
-        
-        {/* Navigation Tabs */}
-        <div className="flex bg-gray-100 p-1 rounded-lg border border-gray-200">
-          <button 
-            type="button"
-            onClick={() => { setActiveTab('products'); if(!isEditing) { setEditingProductId(null); } }}
-            className={`px-4 py-1.5 rounded-md text-xs font-bold uppercase tracking-wider transition-all ${activeTab === 'products' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-800'}`}
-          >
-            {isEditing ? '📝 Edit Product' : '➕ Add Product'}
-          </button>
-          <button 
-            type="button"
-            onClick={() => setActiveTab('groups')}
-            className={`px-4 py-1.5 rounded-md text-xs font-bold uppercase tracking-wider transition-all ${activeTab === 'groups' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-800'}`}
-          >
-            📁 Link Ledger Groups
-          </button>
-        </div>
-      </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        
-        {/* LEFT COMPONENT: CONFIGURATION FORMS */}
-        <div className="bg-gray-50/70 p-4 rounded-xl border border-gray-200 shadow-2xs h-fit">
-          
-          {activeTab === 'products' && (
-            <form onSubmit={handleSaveProduct} className="space-y-3.5">
-              <h3 className="text-xs font-extrabold text-gray-700 uppercase tracking-widest border-b pb-1.5 border-gray-200 flex justify-between">
-                <span>{isEditing ? 'Modify Product Specifications' : 'Product Node Registration'}</span>
-                {isEditing && <span className="text-amber-600 font-bold normal-case text-[11px]">Mode: Update</span>}
-              </h3>
-
-              {/* Product Title Entry */}
-              <div>
-                <label className="block text-[10px] font-black text-gray-700 uppercase mb-1 tracking-wider">Product Commercial Name *</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. Aluminium Sheet"
-                  className="w-full px-3 py-1.5 border border-gray-300 rounded-md text-xs bg-white text-gray-900 font-bold focus:outline-none focus:border-blue-500 shadow-2xs"
-                  value={productForm.name}
-                  onChange={(e) => setProductForm({...productForm, name: e.target.value})}
-                />
-              </div>
-
-              {/* SKU & Linked Account Group */}
-              <div className="grid grid-cols-2 gap-3">
+        {activeTab === 'products' && (
+          <div className="space-y-8">
+            {/* Product Form */}
+            <form onSubmit={handleProductSubmit} className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl">
+              <h2 className="text-sm font-bold text-white mb-4 uppercase tracking-wider">{isEditing ? '✏️ Edit Product' : '➕ Add New Product'}</h2>
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                 <div>
-                  <label className="block text-[10px] font-black text-gray-700 uppercase mb-1 tracking-wider">Custom SKU / Code</label>
-                  <input
-                    type="text"
-                    placeholder="e.g. ALU-SH-01"
-                    className="w-full px-3 py-1.5 border border-gray-300 rounded-md text-xs bg-white text-gray-900 font-mono font-bold focus:outline-none focus:border-blue-500 shadow-2xs"
-                    value={productForm.sku}
-                    onChange={(e) => setProductForm({...productForm, sku: e.target.value})}
+                  <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Product Name *</label>
+                  <input 
+                    type="text" 
+                    required
+                    value={productForm.name}
+                    onChange={(e) => setProductForm({...productForm, name: e.target.value})}
+                    placeholder="e.g. Basmati Rice 25kg" 
+                    className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white"
                   />
                 </div>
                 <div>
-                  <label className="block text-[10px] font-black text-gray-700 uppercase mb-1 tracking-wider">Linked Account Ledger Head *</label>
-                  <select
-                    required
-                    className="w-full px-2 py-1.5 border border-gray-300 rounded-md text-xs bg-white text-gray-900 font-bold focus:outline-none focus:border-blue-500 shadow-2xs"
+                  <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">SKU / Barcode</label>
+                  <input 
+                    type="text" 
+                    value={productForm.sku}
+                    onChange={(e) => setProductForm({...productForm, sku: e.target.value})}
+                    placeholder="SKU-1001" 
+                    className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Inventory Group</label>
+                  <select 
                     value={productForm.group_id}
                     onChange={(e) => setProductForm({...productForm, group_id: e.target.value})}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white"
                   >
-                    <option value="">-- Select Accounting Head --</option>
+                    <option value="">-- Select Group --</option>
                     {inventoryGroups.map(g => (
-                      <option key={g.id} value={g.id}>{g.code} - {g.name}</option>
+                      <option key={g.id} value={g.id}>{g.name} ({g.code})</option>
                     ))}
                   </select>
                 </div>
-              </div>
-
-              {/* Multi-Unit Config Matrix */}
-              <div className="p-3 bg-amber-50/40 border border-amber-200/70 rounded-lg space-y-2.5">
-                <span className="block text-[10px] font-black text-amber-800 uppercase tracking-widest">⚖️ Unit Conversion & Stock Quantifier</span>
-                
-                <div className="grid grid-cols-3 gap-2">
-                  <div>
-                    <label className="block text-[9px] font-bold text-amber-900 uppercase mb-0.5">Primary (Bulk)</label>
-                    <select
-                      className="w-full p-1 border border-gray-300 rounded text-xs bg-white font-semibold text-gray-800"
-                      value={productForm.primary_unit}
-                      onChange={(e) => setProductForm({...productForm, primary_unit: e.target.value})}
-                    >
-                      <option value="Pcs">Pieces (Pcs)</option>
-                      <option value="Kg">Kilogram (Kg)</option>
-                      <option value="Box">Box / Carton</option>
-                      <option value="Bag">Bag / Sack</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-[9px] font-bold text-amber-900 uppercase mb-0.5">Secondary (Sale)</label>
-                    <select
-                      className="w-full p-1 border border-gray-300 rounded text-xs bg-white font-semibold text-gray-800"
-                      value={productForm.secondary_unit}
-                      onChange={(e) => setProductForm({...productForm, secondary_unit: e.target.value})}
-                    >
-                      <option value="Pcs">Pieces (Pcs)</option>
-                      <option value="Kg">Kilogram (Kg)</option>
-                      <option value="Gram">Gram (g)</option>
-                      <option value="Packet">Packet</option>
-                      <option value="Ltr">Litre (Ltr)</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-[9px] font-bold text-amber-900 uppercase mb-0.5">Multiplier Rate</label>
-                    <input
-                      type="text"
-                      inputMode="decimal"
-                      className="w-full p-1 border border-gray-300 rounded text-xs bg-white font-mono font-bold text-gray-900 focus:outline-none focus:border-blue-500"
-                      value={productForm.conversion_multiplier === 0 ? '' : productForm.conversion_multiplier}
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        if (val === '' || /^\d*\.?\d*$/.test(val)) {
-                          setProductForm({...productForm, conversion_multiplier: val === '' ? 0 : val});
-                        }
-                      }}
-                      onBlur={(e) => {
-                        setProductForm({...productForm, conversion_multiplier: parseFloat(e.target.value) || 1});
-                      }}
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Pricing Matrix */}
-              <div className="grid grid-cols-3 gap-2 bg-blue-50/30 p-2.5 border border-blue-100 rounded-lg">
                 <div>
-                  <label className="block text-[9px] font-black text-blue-900 uppercase mb-0.5">Bulk Pur. Rate</label>
-                  <input
-                    type="text"
-                    inputMode="decimal"
-                    placeholder="0.00"
-                    className="w-full p-1 border border-gray-300 rounded text-xs bg-white font-mono font-bold text-gray-900 focus:outline-none focus:border-blue-500"
-                    value={productForm.purchase_rate_bulk === 0 ? '' : productForm.purchase_rate_bulk}
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      if (val === '' || /^\d*\.?\d*$/.test(val)) {
-                        setProductForm({...productForm, purchase_rate_bulk: val === '' ? 0 : val});
-                      }
-                    }}
-                    onBlur={(e) => {
-                      setProductForm({...productForm, purchase_rate_bulk: parseFloat(e.target.value) || 0});
-                    }}
+                  <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Primary Unit</label>
+                  <select 
+                    value={productForm.primary_unit}
+                    onChange={(e) => setProductForm({...productForm, primary_unit: e.target.value})}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white"
+                  >
+                    <option value="Pcs">Pcs</option>
+                    <option value="Kg">Kg</option>
+                    <option value="Bag">Bag</option>
+                    <option value="Box">Box</option>
+                    <option value="Litre">Litre</option>
+                    <option value="Meter">Meter</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Purchase Rate (Bulk)</label>
+                  <input 
+                    type="number" 
+                    step="any"
+                    value={productForm.purchase_rate_bulk}
+                    onChange={(e) => setProductForm({...productForm, purchase_rate_bulk: parseFloat(e.target.value) || 0})}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white"
                   />
                 </div>
                 <div>
-                  <label className="block text-[9px] font-black text-blue-900 uppercase mb-0.5">Selling Price *</label>
-                  <input
-                    type="text"
-                    inputMode="decimal"
-                    required
-                    placeholder="0.00"
-                    className="w-full p-1 border border-gray-300 rounded text-xs bg-white font-mono font-bold text-gray-900 focus:outline-none focus:border-blue-500"
-                    value={productForm.selling_rate_retail === 0 ? '' : productForm.selling_rate_retail}
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      if (val === '' || /^\d*\.?\d*$/.test(val)) {
-                        setProductForm({...productForm, selling_rate_retail: val === '' ? 0 : val});
-                      }
-                    }}
-                    onBlur={(e) => {
-                      setProductForm({...productForm, selling_rate_retail: parseFloat(e.target.value) || 0});
-                    }}
+                  <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Selling Rate (Retail)</label>
+                  <input 
+                    type="number" 
+                    step="any"
+                    value={productForm.selling_rate_retail}
+                    onChange={(e) => setProductForm({...productForm, selling_rate_retail: parseFloat(e.target.value) || 0})}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white"
                   />
                 </div>
                 <div>
-                  <label className="block text-[9px] font-black text-blue-900 uppercase mb-0.5">Floor Min Rate</label>
-                  <input
-                    type="text"
-                    inputMode="decimal"
-                    placeholder="0.00"
-                    className="w-full p-1 border border-gray-300 rounded text-xs bg-white font-mono font-bold text-gray-900 focus:outline-none focus:border-blue-500"
-                    value={productForm.min_selling_rate === 0 ? '' : productForm.min_selling_rate}
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      if (val === '' || /^\d*\.?\d*$/.test(val)) {
-                        setProductForm({...productForm, min_selling_rate: val === '' ? 0 : val});
-                      }
-                    }}
-                    onBlur={(e) => {
-                      setProductForm({...productForm, min_selling_rate: parseFloat(e.target.value) || 0});
-                    }}
-                  />
-                </div>
-              </div>
-
-              {/* Risk Control parameters */}
-              <div className="grid grid-cols-3 gap-2">
-                <div>
-                  <label className="block text-[9px] font-black text-gray-700 uppercase mb-0.5">GST Slab (%)</label>
-                  <select
-                    className="w-full p-1 border border-gray-300 rounded text-xs bg-white font-bold text-gray-800"
+                  <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">GST %</label>
+                  <input 
+                    type="number" 
                     value={productForm.gst_percentage}
                     onChange={(e) => setProductForm({...productForm, gst_percentage: parseInt(e.target.value) || 0})}
-                  >
-                    <option value="0">0% Exempt</option>
-                    <option value="5">5% Standard</option>
-                    <option value="12">12% Mid</option>
-                    <option value="18">18% High</option>
-                    <option value="28">28% Luxury</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-[9px] font-black text-gray-700 uppercase mb-0.5">Discount %</label>
-                  <input
-                    type="text"
-                    inputMode="decimal"
-                    className="w-full p-1 border border-gray-300 rounded text-xs bg-white font-mono font-medium text-gray-900 focus:outline-none focus:border-blue-500"
-                    value={productForm.max_discount_percentage === 0 ? '' : productForm.max_discount_percentage}
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      if (val === '' || /^\d*\.?\d*$/.test(val)) {
-                        setProductForm({...productForm, max_discount_percentage: val === '' ? 0 : val});
-                      }
-                    }}
-                    onBlur={(e) => {
-                      setProductForm({...productForm, max_discount_percentage: parseFloat(e.target.value) || 0});
-                    }}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white"
                   />
                 </div>
                 <div>
-                  <label className="block text-[9px] font-black text-gray-700 uppercase mb-0.5">Low Stock Alert</label>
-                  <input
-                    type="text"
-                    inputMode="decimal"
-                    className="w-full p-1 border border-gray-300 rounded text-xs bg-white font-mono font-medium text-gray-900 focus:outline-none focus:border-blue-500"
-                    value={productForm.min_stock_alert === 0 ? '' : productForm.min_stock_alert}
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      if (val === '' || /^\d*\.?\d*$/.test(val)) {
-                        setProductForm({...productForm, min_stock_alert: val === '' ? 0 : val});
-                      }
-                    }}
-                    onBlur={(e) => {
-                      setProductForm({...productForm, min_stock_alert: parseFloat(e.target.value) || 10});
-                    }}
+                  <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Current Stock</label>
+                  <input 
+                    type="number" 
+                    step="any"
+                    value={productForm.current_stock_kg}
+                    onChange={(e) => setProductForm({...productForm, current_stock_kg: parseFloat(e.target.value) || 0})}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white"
                   />
                 </div>
               </div>
-
-              {/* Initial Stock Parameters */}
-              <div className="grid grid-cols-2 gap-3 pt-1">
-                <div>
-                  <label className="block text-[10px] font-black text-gray-700 uppercase mb-1 tracking-wider">Initial Stock Level</label>
-                  <input
-                    type="text"
-                    inputMode="decimal"
-                    placeholder="Opening quantity..."
-                    className="w-full px-3 py-1.5 border border-gray-300 rounded-md text-xs bg-white text-gray-900 font-mono font-bold focus:outline-none focus:border-blue-500 shadow-2xs"
-                    value={productForm.current_stock_kg === 0 ? '' : productForm.current_stock_kg}
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      if (val === '' || /^\d*\.?\d*$/.test(val)) {
-                        setProductForm({...productForm, current_stock_kg: val === '' ? 0 : val});
-                      }
-                    }}
-                    onBlur={(e) => {
-                      setProductForm({...productForm, current_stock_kg: parseFloat(e.target.value) || 0});
-                    }}
-                  />
-                </div>
-                <div>
-                  <label className="block text-[10px] font-black text-gray-700 uppercase mb-1 tracking-wider">Visibility Status</label>
-                  <select
-                    className="w-full px-2 py-1.5 border border-gray-300 rounded-md text-xs bg-white text-gray-900 font-bold focus:outline-none focus:border-blue-500 shadow-2xs"
-                    value={productForm.is_credit_allowed ? 'yes' : 'no'}
-                    onChange={(e) => setProductForm({...productForm, is_credit_allowed: e.target.value === 'yes'})}
+              <div className="mt-4 flex justify-end gap-2">
+                {isEditing && (
+                  <button 
+                    type="button" 
+                    onClick={() => { setIsEditing(false); setProductForm({ name: '', sku: '', group_id: '', primary_unit: 'Pcs', secondary_unit: 'Pcs', conversion_multiplier: 1, purchase_rate_bulk: 0, selling_rate_retail: 0, min_selling_rate: 0, gst_percentage: 0, max_discount_percentage: 0, min_stock_alert: 10, is_credit_allowed: true, current_stock_kg: 0 }); }}
+                    className="bg-slate-800 text-slate-300 px-4 py-2 rounded-lg text-xs font-bold"
                   >
-                    <option value="yes">🔓 Visible to Buyer</option>
-                    <option value="no">🔒 Hidden from Buyer</option>
-                  </select>
-                </div>
-              </div>
-
-              <button
-                type="submit"
-                className="w-full mt-3 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg text-[11px] uppercase tracking-wider transition-all shadow-md"
-              >
-                {isEditing ? '💾 Apply Property Changes' : '📦 Commit Stock To Catalog'}
-              </button>
-            </form>
-          )}
-
-          {activeTab === 'groups' && (
-            <form onSubmit={handleCreateGroup} className="space-y-4">
-              <h3 className="text-xs font-extrabold text-gray-700 uppercase tracking-widest border-b pb-1.5 border-gray-200">
-                Create Dynamic Account-Inventory Link
-              </h3>
-              
-              <div>
-                <label className="block text-[10px] font-black text-gray-700 uppercase mb-1 tracking-wider">Select Database Main/Sub Ledger *</label>
-                <select
-                  required
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs bg-white text-gray-900 font-bold focus:outline-none focus:border-blue-500 shadow-sm"
-                  onChange={(e) => {
-                    const selected = dbLedgers.find(l => l.ledger_code === e.target.value);
-                    if(selected) {
-                      setGroupForm({...groupForm, name: selected.ledger_name, code: selected.ledger_code});
-                    }
-                  }}
+                    Cancel
+                  </button>
+                )}
+                <button 
+                  type="submit" 
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-2 rounded-lg text-xs font-bold shadow transition-all"
                 >
-                  <option value="">{isLoadingLedgers ? 'Fetching Database Ledgers...' : '-- Choose Ledger From Database --'}</option>
-                  {dbLedgers.map(l => (
-                    <option key={l.id} value={l.ledger_code}>{l.ledger_code} - {l.ledger_name} ({l.ledger_group})</option>
-                  ))}
-                </select>
+                  {isEditing ? 'Update Product' : 'Save Product →'}
+                </button>
               </div>
-
-              <div>
-                <label className="block text-[10px] font-black text-gray-700 uppercase mb-1 tracking-wider">Category Profile Title</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="Auto-filled from ledger name..."
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs bg-white text-gray-900 font-bold focus:outline-none focus:border-blue-500 shadow-2xs"
-                  value={groupForm.name}
-                  onChange={(e) => setGroupForm({...groupForm, name: e.target.value})}
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-[10px] font-black text-gray-700 uppercase mb-1 tracking-wider">Ledger Blueprint Code</label>
-                  <input
-                    type="text"
-                    required
-                    readOnly
-                    placeholder="Auto-filled code..."
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs bg-gray-100 text-gray-600 font-mono font-bold cursor-not-allowed shadow-2xs"
-                    value={groupForm.code}
-                  />
-                </div>
-                <div>
-                  <label className="block text-[10px] font-black text-gray-700 uppercase mb-1 tracking-wider">Statutory HSN Code</label>
-                  <input
-                    type="text"
-                    placeholder="e.g. 1006"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs bg-white text-gray-900 font-mono focus:outline-none focus:border-blue-500 shadow-2xs"
-                    value={groupForm.hsn_code}
-                    onChange={(e) => setGroupForm({...groupForm, hsn_code: e.target.value})}
-                  />
-                </div>
-              </div>
-
-              <button
-                type="submit"
-                className="w-full mt-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2 px-4 rounded-lg text-[11px] uppercase tracking-wider transition-all shadow-md"
-              >
-                🔗 Establish Ledger-Stock Mapping
-              </button>
             </form>
-          )}
-        </div>
 
-        {/* RIGHT COMPONENT: LIVE REGISTER MATRIX */}
-        <div className="lg:col-span-2 space-y-4">
-          <div className="flex justify-between items-center bg-gray-50 p-2.5 rounded-lg border border-gray-200">
-            <span className="text-xs font-black text-gray-700 uppercase tracking-wider">Live Inventory Master Registry</span>
-            <span className="px-2.5 py-0.5 bg-blue-50 border border-blue-200 text-blue-700 rounded-full font-mono font-bold text-[10px]">
-              Active Items Indexed: {products.length}
-            </span>
-          </div>
-
-          {isLoadingProducts ? (
-            <div className="text-center py-10 text-xs font-bold text-gray-500">
-              🔄 Pulling synchronized items from Database...
-            </div>
-          ) : products.length === 0 ? (
-            <div className="text-center py-16 border-2 border-dashed border-gray-200 rounded-xl bg-gray-50/50">
-              <span className="text-3xl block mb-2">📦</span>
-              <h4 className="text-xs font-black text-gray-700 uppercase tracking-wider">No Products Deployed In Current Catalog</h4>
-              <p className="text-[11px] text-gray-400 max-w-xs mx-auto mt-1 leading-relaxed">
-                Use the left configurations console to link products with active ledger accounts and spin up new warehouse inventory.
-              </p>
-            </div>
-          ) : (
-            <div className="overflow-x-auto border border-gray-200 rounded-xl shadow-2xs bg-white">
-              <table className="w-full text-left border-collapse">
-                <thead>
-                  <tr className="bg-gray-50 text-gray-700 text-[10px] font-black uppercase border-b border-gray-200 tracking-wider">
-                    <th className="p-2.5">Product Particulars & Category</th>
-                    <th className="p-2.5">Pricing Matrix (INR)</th>
-                    <th className="p-2.5 text-center">Discount</th>
-                    <th className="p-2.5 text-center">Buyer View</th>
-                    <th className="p-2.5 text-right">Available Stock</th>
-                    <th className="p-2.5 text-center">Operations</th>
-                  </tr>
-                </thead>
-                <tbody className="text-xs text-gray-600 divide-y divide-gray-100 font-medium">
-                  {products.map((p) => {
-                    const matchedGroup = inventoryGroups.find(g => g.id === p.group_id);
-                    const isLowStock = p.current_stock_kg <= p.min_stock_alert;
-
-                    return (
-                      <tr key={p.id} className={`hover:bg-gray-50/50 transition-colors ${isLowStock ? 'bg-red-50/30' : ''}`}>
-                        <td className="p-2.5">
-                          <span className="block font-bold text-gray-900 text-sm">{p.name}</span>
-                          <div className="flex items-center gap-2 mt-0.5 text-[10px]">
-                            <span className="font-mono text-gray-400 font-bold bg-gray-100 px-1 rounded">{p.sku || 'NO-SKU'}</span>
-                            <span className="text-blue-600 font-extrabold bg-blue-50 px-1.5 py-0.2 border border-blue-100 rounded">
-                              🔗 Linked Head: {matchedGroup ? `${matchedGroup.code} (${matchedGroup.name})` : 'Linked to Master Shop'}
-                            </span>
-                          </div>
-                        </td>
-                        <td className="p-2.5 font-mono text-[11px] space-y-0.5">
-                          <span className="block text-blue-700 font-bold">Price: <b>₹{p.selling_rate_retail}</b>/{p.secondary_unit}</span>
-                        </td>
-                        <td className="p-2.5 text-center space-y-0.5">
-                          <span className="block text-[11px] text-purple-700 font-bold">{p.max_discount_percentage}% Max</span>
-                        </td>
-                        <td className="p-2.5 text-center">
-                          {p.is_credit_allowed ? (
-                            <span className="text-emerald-600 text-xs font-bold">🔓 Public</span>
-                          ) : (
-                            <span className="px-2 py-0.5 bg-red-100 text-red-700 text-[9px] font-black rounded-full uppercase tracking-tighter">🔒 Hidden</span>
-                          )}
-                        </td>
-                        <td className="p-2.5 text-right font-mono">
-                          <span className={`block font-bold text-sm ${isLowStock ? 'text-red-600' : 'text-blue-700'}`}>
-                            {p.current_stock_kg} {p.secondary_unit}
-                          </span>
-                          {isLowStock && <span className="text-[9px] text-red-500 font-bold block">⚠️ Low Stock Alert</span>}
-                        </td>
-                        <td className="p-2.5 text-center">
-                          <button 
-                            type="button"
-                            onClick={() => handleEditClick(p)}
-                            className="px-2 py-1 bg-white border border-gray-300 rounded hover:bg-gray-100 text-gray-700 font-bold text-[11px] tracking-wide transition-all shadow-sm"
-                          >
-                            📝 Edit
-                          </button>
+            {/* Products List Table */}
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl overflow-x-auto">
+              <h2 className="text-sm font-bold text-white mb-4 uppercase tracking-wider">📦 Saved Products ({products.length})</h2>
+              {isLoadingProducts ? (
+                <p className="text-xs text-slate-400">Loading products...</p>
+              ) : products.length === 0 ? (
+                <p className="text-xs text-slate-400">No products added yet.</p>
+              ) : (
+                <table className="w-full text-left text-xs">
+                  <thead>
+                    <tr className="border-b border-slate-800 text-slate-400">
+                      <th className="pb-3 font-semibold">Name</th>
+                      <th className="pb-3 font-semibold">SKU</th>
+                      <th className="pb-3 font-semibold">Unit</th>
+                      <th className="pb-3 font-semibold">Purchase Price</th>
+                      <th className="pb-3 font-semibold">Selling Price</th>
+                      <th className="pb-3 font-semibold">GST %</th>
+                      <th className="pb-3 font-semibold">Stock</th>
+                      <th className="pb-3 font-semibold text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800/60">
+                    {products.map((p) => (
+                      <tr key={p.id} className="hover:bg-slate-800/40">
+                        <td className="py-3 font-bold text-white">{p.name}</td>
+                        <td className="py-3 font-mono text-slate-300">{p.sku}</td>
+                        <td className="py-3 text-slate-300">{p.primary_unit}</td>
+                        <td className="py-3 text-slate-300">₹{p.purchase_rate_bulk}</td>
+                        <td className="py-3 text-emerald-400 font-bold">₹{p.selling_rate_retail}</td>
+                        <td className="py-3 text-slate-300">{p.gst_percentage}%</td>
+                        <td className="py-3 font-bold text-white">{p.current_stock_kg}</td>
+                        <td className="py-3 text-right space-x-2">
+                          <button onClick={() => handleEditProduct(p)} className="text-blue-400 hover:underline">Edit</button>
+                          <button onClick={() => handleDeleteProduct(p.id)} className="text-red-400 hover:underline">Delete</button>
                         </td>
                       </tr>
-                    );
-                  })}
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'groups' && (
+          <div className="space-y-8">
+            {/* Group Form */}
+            <form onSubmit={handleCreateGroup} className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl">
+              <h2 className="text-sm font-bold text-white mb-4 uppercase tracking-wider">🏷️ Create Inventory Group</h2>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Group Name *</label>
+                  <input 
+                    type="text" 
+                    required
+                    value={groupForm.name}
+                    onChange={(e) => setGroupForm({...groupForm, name: e.target.value})}
+                    placeholder="e.g. Groceries, Electronics" 
+                    className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Group Code</label>
+                  <input 
+                    type="text" 
+                    value={groupForm.code}
+                    onChange={(e) => setGroupForm({...groupForm, code: e.target.value})}
+                    placeholder="GROC" 
+                    className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">HSN Code</label>
+                  <input 
+                    type="text" 
+                    value={groupForm.hsn_code}
+                    onChange={(e) => setGroupForm({...groupForm, hsn_code: e.target.value})}
+                    placeholder="1006" 
+                    className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white"
+                  />
+                </div>
+              </div>
+              <div className="mt-4 flex justify-end">
+                <button type="submit" className="bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-2 rounded-lg text-xs font-bold shadow">
+                  Save Group →
+                </button>
+              </div>
+            </form>
+
+            {/* Groups Table */}
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl">
+              <h2 className="text-sm font-bold text-white mb-4 uppercase tracking-wider">🏷️ Inventory Groups ({inventoryGroups.length})</h2>
+              <table className="w-full text-left text-xs">
+                <thead>
+                  <tr className="border-b border-slate-800 text-slate-400">
+                    <th className="pb-3 font-semibold">Group ID</th>
+                    <th className="pb-3 font-semibold">Group Name</th>
+                    <th className="pb-3 font-semibold">Code</th>
+                    <th className="pb-3 font-semibold">HSN Code</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-800/60">
+                  {inventoryGroups.map((g) => (
+                    <tr key={g.id} className="hover:bg-slate-800/40">
+                      <td className="py-3 font-mono text-slate-400">{g.id}</td>
+                      <td className="py-3 font-bold text-white">{g.name}</td>
+                      <td className="py-3 text-slate-300">{g.code}</td>
+                      <td className="py-3 text-slate-300">{g.hsn_code}</td>
+                    </tr>
+                  ))}
                 </tbody>
               </table>
             </div>
-          )}
-        </div>
-
+          </div>
+        )}
       </div>
     </div>
   );

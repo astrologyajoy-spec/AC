@@ -1,0 +1,7 @@
+{
+  "name": "Easy Ledger",
+  "description": "Comprehensive accounting, inventory and business ledger management system",
+  "capabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

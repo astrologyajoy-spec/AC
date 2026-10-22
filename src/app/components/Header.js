@@ -5,23 +5,25 @@ import Link from 'next/link';
 
 export default function Header() {
   const [isMasterOpen, setIsMasterOpen] = useState(false);
-  const [currentUserName, setCurrentUserName] = useState('AJOY'); // Fallback default
+  const [currentUserName] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const savedUser = localStorage.getItem('user');
+      if (savedUser) {
+        try {
+          const loggedInUser = JSON.parse(savedUser);
+          if (loggedInUser && loggedInUser.full_name) {
+            return loggedInUser.full_name;
+          }
+        } catch (e) {
+          console.error("Error parsing user from localStorage", e);
+        }
+      }
+    }
+    return 'AJOY';
+  });
   const dropdownRef = useRef(null);
 
   useEffect(() => {
-    // ✅ ডাইনামিকালি লগইন করা ইউজারের নাম রিড করা হচ্ছে
-    const savedUser = localStorage.getItem('user');
-    if (savedUser) {
-      try {
-        const loggedInUser = JSON.parse(savedUser);
-        if (loggedInUser && loggedInUser.full_name) {
-          setCurrentUserName(loggedInUser.full_name);
-        }
-      } catch (e) {
-        console.error("Error parsing user from localStorage", e);
-      }
-    }
-
     function handleClickOutside(event) {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
         setIsMasterOpen(false);
